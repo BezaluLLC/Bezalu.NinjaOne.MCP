@@ -1,5 +1,6 @@
-using ModelContextProtocol.Server;
 using System.ComponentModel;
+using System.Globalization;
+using ModelContextProtocol.Server;
 
 namespace Bezalu.NinjaOne.MCP.Tools;
 
@@ -19,9 +20,9 @@ internal sealed class SoftwareTools(NinjaOneClient client)
         CancellationToken cancellationToken = default)
     {
         const string dateFormat = "yyyy-MM-dd";
-        if (installedAfter is not null && !DateOnly.TryParseExact(installedAfter, dateFormat, out _))
+        if (installedAfter is not null && !DateOnly.TryParseExact(installedAfter, dateFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
             return $"Invalid installedAfter date '{installedAfter}'. Expected format: {dateFormat}";
-        if (installedBefore is not null && !DateOnly.TryParseExact(installedBefore, dateFormat, out _))
+        if (installedBefore is not null && !DateOnly.TryParseExact(installedBefore, dateFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
             return $"Invalid installedBefore date '{installedBefore}'. Expected format: {dateFormat}";
 
         var result = await client.V2.Queries.Software.GetAsync(q =>
