@@ -2,7 +2,13 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 COPY *.csproj NuGet.Config ./
-RUN dotnet restore -r linux-x64
+RUN --mount=type=secret,id=github_token \
+    dotnet nuget update source "github" \
+      --username "docker" \
+      --password "$(cat /run/secrets/github_token)" \
+      --store-password-in-clear-text \
+      --configfile ./NuGet.Config && \
+    dotnet restore -r linux-x64
 
 COPY . .
 RUN dotnet publish -c Release -r linux-x64 --no-restore -o /app/publish
