@@ -1,14 +1,11 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
+ARG NUGET_GITHUB_USERNAME
+ARG NUGET_GITHUB_TOKEN
+
 COPY *.csproj NuGet.Config ./
-RUN --mount=type=secret,id=nuget_auth,target=/root/.nuget_auth \
-    dotnet nuget update source github \
-      --username "$(head -1 /root/.nuget_auth)" \
-      --password "$(tail -1 /root/.nuget_auth)" \
-      --store-password-in-clear-text \
-      --configfile NuGet.Config && \
-    dotnet restore -r linux-x64
+RUN dotnet restore -r linux-x64
 
 COPY . .
 RUN dotnet publish -c Release -r linux-x64 --no-restore -o /app/publish
