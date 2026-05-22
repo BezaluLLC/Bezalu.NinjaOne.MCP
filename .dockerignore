@@ -1,0 +1,16 @@
+**/.dockerignore
+**/.git
+**/.vs
+**/.vscode
+**/bin
+**/obj
+**/publish
+**/*.user
+**/*.dbmdl
+**/*.jfm
+**/azds.yaml
+**/docker-compose*
+**/Dockerfile*
+**/charts
+**/node_modules
+**/.nuget_auth
