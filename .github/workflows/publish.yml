@@ -55,6 +55,3 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64
-          build-args: |
-            NUGET_GITHUB_USERNAME=${{ github.actor }}
-            NUGET_GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
