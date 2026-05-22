@@ -18,6 +18,12 @@ internal sealed class SoftwareTools(NinjaOneClient client)
         [Description("Cursor for pagination")] string? cursor = null,
         CancellationToken cancellationToken = default)
     {
+        const string dateFormat = "yyyy-MM-dd";
+        if (installedAfter is not null && !DateOnly.TryParseExact(installedAfter, dateFormat, out _))
+            return $"Invalid installedAfter date '{installedAfter}'. Expected format: {dateFormat}";
+        if (installedBefore is not null && !DateOnly.TryParseExact(installedBefore, dateFormat, out _))
+            return $"Invalid installedBefore date '{installedBefore}'. Expected format: {dateFormat}";
+
         var result = await client.V2.Queries.Software.GetAsync(q =>
         {
             q.QueryParameters.Df = deviceFilter;

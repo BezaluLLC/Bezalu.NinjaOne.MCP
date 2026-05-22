@@ -19,12 +19,21 @@ internal sealed class ServiceTools(NinjaOneClient client)
         [Description("Cursor for pagination")] string? cursor = null,
         CancellationToken cancellationToken = default)
     {
+        GetStateQueryParameterType? parsedState = null;
+        if (!string.IsNullOrWhiteSpace(state))
+        {
+            if (!Enum.TryParse<GetStateQueryParameterType>(state, ignoreCase: true, out var s))
+            {
+                var allowed = string.Join(", ", Enum.GetNames<GetStateQueryParameterType>());
+                return $"Invalid state '{state}'. Allowed values: {allowed}";
+            }
+            parsedState = s;
+        }
+
         var result = await client.V2.Queries.WindowsServices.GetAsync(q =>
         {
             q.QueryParameters.Name = name;
-            q.QueryParameters.State = state is not null
-                ? Enum.Parse<GetStateQueryParameterType>(state, ignoreCase: true)
-                : null;
+            q.QueryParameters.State = parsedState;
             q.QueryParameters.Df = deviceFilter;
             q.QueryParameters.PageSize = pageSize;
             q.QueryParameters.Cursor = cursor;
