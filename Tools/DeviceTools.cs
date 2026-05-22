@@ -8,7 +8,7 @@ namespace Bezalu.NinjaOne.MCP.Tools;
 /// </summary>
 internal sealed class DeviceTools(NinjaOneClient client)
 {
-    [McpServerTool(Name = "list_devices")]
+    [McpServerTool(Name = "list_devices", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("List all devices in the NinjaOne instance. Returns device ID, system name, organization, and status.")]
     public async Task<string> ListDevicesAsync(
         [Description("Page size (default 50, max 1000)")] int? pageSize = 50,
@@ -24,7 +24,7 @@ internal sealed class DeviceTools(NinjaOneClient client)
         return Json.Serialize(devices);
     }
 
-    [McpServerTool(Name = "list_devices_detailed")]
+    [McpServerTool(Name = "list_devices_detailed", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("List all devices with detailed information including OS, last contact time, and hardware details.")]
     public async Task<string> ListDevicesDetailedAsync(
         [Description("Page size (default 50, max 1000)")] int? pageSize = 50,
@@ -40,7 +40,7 @@ internal sealed class DeviceTools(NinjaOneClient client)
         return Json.Serialize(devices);
     }
 
-    [McpServerTool(Name = "get_device")]
+    [McpServerTool(Name = "get_device", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("Get detailed information about a specific device by its ID.")]
     public async Task<string> GetDeviceAsync(
         [Description("The NinjaOne device ID")] int deviceId,
@@ -50,7 +50,7 @@ internal sealed class DeviceTools(NinjaOneClient client)
         return Json.Serialize(device);
     }
 
-    [McpServerTool(Name = "search_devices")]
+    [McpServerTool(Name = "search_devices", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("Search for devices by name or other criteria.")]
     public async Task<string> SearchDevicesAsync(
         [Description("Search query string")] string query,

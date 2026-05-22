@@ -9,7 +9,7 @@ namespace Bezalu.NinjaOne.MCP.Tools;
 /// </summary>
 internal sealed class SoftwareTools(NinjaOneClient client)
 {
-    [McpServerTool(Name = "query_installed_software")]
+    [McpServerTool(Name = "query_installed_software", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("Query installed software across all devices. Returns software name, version, install date, and device info.")]
     public async Task<string> QueryInstalledSoftwareAsync(
         [Description("Device filter (optional NinjaOne device filter expression)")] string? deviceFilter = null,
@@ -37,7 +37,7 @@ internal sealed class SoftwareTools(NinjaOneClient client)
         return Json.Serialize(result);
     }
 
-    [McpServerTool(Name = "list_software_products")]
+    [McpServerTool(Name = "list_software_products", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("List all known software products tracked by NinjaOne.")]
     public async Task<string> ListSoftwareProductsAsync(CancellationToken cancellationToken = default)
     {
@@ -45,7 +45,7 @@ internal sealed class SoftwareTools(NinjaOneClient client)
         return Json.Serialize(products);
     }
 
-    [McpServerTool(Name = "query_software_patches")]
+    [McpServerTool(Name = "query_software_patches", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("Query available software patches across all devices. Shows pending patches by device.")]
     public async Task<string> QuerySoftwarePatchesAsync(
         [Description("Device filter (optional NinjaOne device filter expression)")] string? deviceFilter = null,
@@ -63,7 +63,7 @@ internal sealed class SoftwareTools(NinjaOneClient client)
         return Json.Serialize(result);
     }
 
-    [McpServerTool(Name = "query_software_patch_installs")]
+    [McpServerTool(Name = "query_software_patch_installs", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("Query software patch installation history across devices. Shows what patches were installed and when.")]
     public async Task<string> QuerySoftwarePatchInstallsAsync(
         [Description("Device filter (optional NinjaOne device filter expression)")] string? deviceFilter = null,

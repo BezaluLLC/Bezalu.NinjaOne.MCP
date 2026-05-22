@@ -8,7 +8,7 @@ namespace Bezalu.NinjaOne.MCP.Tools;
 /// </summary>
 internal sealed class JobTools(NinjaOneClient client)
 {
-    [McpServerTool(Name = "list_jobs")]
+    [McpServerTool(Name = "list_jobs", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("List scheduled and running jobs across the NinjaOne instance. Includes scripted tasks, patching jobs, and maintenance.")]
     public async Task<string> ListJobsAsync(
         [Description("Job type filter (e.g., actionset, script)")] string? jobType = null,

@@ -8,7 +8,7 @@ namespace Bezalu.NinjaOne.MCP.Tools;
 /// </summary>
 internal sealed class TaskTools(NinjaOneClient client)
 {
-    [McpServerTool(Name = "list_tasks")]
+    [McpServerTool(Name = "list_tasks", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("List all automation tasks configured in the NinjaOne instance.")]
     public async Task<string> ListTasksAsync(CancellationToken cancellationToken = default)
     {

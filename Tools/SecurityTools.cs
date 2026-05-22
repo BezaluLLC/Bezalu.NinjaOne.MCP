@@ -8,7 +8,7 @@ namespace Bezalu.NinjaOne.MCP.Tools;
 /// </summary>
 internal sealed class SecurityTools(NinjaOneClient client)
 {
-    [McpServerTool(Name = "query_antivirus_status")]
+    [McpServerTool(Name = "query_antivirus_status", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("Query antivirus protection status across all managed devices. Shows product name, status, and definition age.")]
     public async Task<string> QueryAntivirusStatusAsync(
         [Description("Device filter (optional NinjaOne device filter expression)")] string? deviceFilter = null,
@@ -26,7 +26,7 @@ internal sealed class SecurityTools(NinjaOneClient client)
         return Json.Serialize(result);
     }
 
-    [McpServerTool(Name = "query_antivirus_threats")]
+    [McpServerTool(Name = "query_antivirus_threats", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("Query detected antivirus threats across all managed devices.")]
     public async Task<string> QueryAntivirusThreatsAsync(
         [Description("Device filter (optional NinjaOne device filter expression)")] string? deviceFilter = null,
@@ -44,7 +44,7 @@ internal sealed class SecurityTools(NinjaOneClient client)
         return Json.Serialize(result);
     }
 
-    [McpServerTool(Name = "query_os_patches")]
+    [McpServerTool(Name = "query_os_patches", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("Query available OS patches across all managed devices. Shows pending Windows/macOS updates.")]
     public async Task<string> QueryOsPatchesAsync(
         [Description("Device filter (optional NinjaOne device filter expression)")] string? deviceFilter = null,
@@ -62,7 +62,7 @@ internal sealed class SecurityTools(NinjaOneClient client)
         return Json.Serialize(result);
     }
 
-    [McpServerTool(Name = "query_os_patch_installs")]
+    [McpServerTool(Name = "query_os_patch_installs", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("Query OS patch installation history across devices. Shows what OS updates were installed and when.")]
     public async Task<string> QueryOsPatchInstallsAsync(
         [Description("Device filter (optional NinjaOne device filter expression)")] string? deviceFilter = null,

@@ -8,7 +8,7 @@ namespace Bezalu.NinjaOne.MCP.Tools;
 /// </summary>
 internal sealed class LocationTools(NinjaOneClient client)
 {
-    [McpServerTool(Name = "list_locations")]
+    [McpServerTool(Name = "list_locations", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("List all locations across all organizations, or for a specific organization.")]
     public async Task<string> ListLocationsAsync(
         [Description("Filter by organization ID (optional)")] int? organizationId = null,

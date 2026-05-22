@@ -8,7 +8,7 @@ namespace Bezalu.NinjaOne.MCP.Tools;
 /// </summary>
 internal sealed class AlertTools(NinjaOneClient client)
 {
-    [McpServerTool(Name = "list_alerts")]
+    [McpServerTool(Name = "list_alerts", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("List active alerts across all devices and organizations. Returns alert severity, message, device, and timestamp.")]
     public async Task<string> ListAlertsAsync(
         [Description("Source type filter (e.g., CONDITION, CONDITION_ACTIONSET)")] string? sourceType = null,
@@ -24,7 +24,7 @@ internal sealed class AlertTools(NinjaOneClient client)
         return Json.Serialize(alerts);
     }
 
-    [McpServerTool(Name = "reset_alert")]
+    [McpServerTool(Name = "reset_alert", ReadOnly = false, Destructive = true, Idempotent = true, OpenWorld = false)]
     [Description("Reset/acknowledge a specific alert by its unique identifier.")]
     public async Task<string> ResetAlertAsync(
         [Description("The alert unique identifier (UID) as a GUID")] string alertUid,

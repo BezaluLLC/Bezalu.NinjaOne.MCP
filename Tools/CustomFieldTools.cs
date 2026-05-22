@@ -9,7 +9,7 @@ namespace Bezalu.NinjaOne.MCP.Tools;
 /// </summary>
 internal sealed class CustomFieldTools(NinjaOneClient client)
 {
-    [McpServerTool(Name = "list_custom_fields")]
+    [McpServerTool(Name = "list_custom_fields", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("List all custom field definitions configured in the NinjaOne instance.")]
     public async Task<string> ListCustomFieldsAsync(CancellationToken cancellationToken = default)
     {
@@ -17,7 +17,7 @@ internal sealed class CustomFieldTools(NinjaOneClient client)
         return Json.Serialize(fields);
     }
 
-    [McpServerTool(Name = "get_device_custom_fields")]
+    [McpServerTool(Name = "get_device_custom_fields", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("Get custom field values for a specific device.")]
     public async Task<string> GetDeviceCustomFieldsAsync(
         [Description("The NinjaOne device ID")] int deviceId,
@@ -27,7 +27,7 @@ internal sealed class CustomFieldTools(NinjaOneClient client)
         return Json.Serialize(fields);
     }
 
-    [McpServerTool(Name = "update_device_custom_fields")]
+    [McpServerTool(Name = "update_device_custom_fields", ReadOnly = false, Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("Update custom field values for a specific device. Pass field names and values as a JSON object.")]
     public async Task<string> UpdateDeviceCustomFieldsAsync(
         [Description("The NinjaOne device ID")] int deviceId,

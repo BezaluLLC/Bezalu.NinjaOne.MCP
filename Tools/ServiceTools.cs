@@ -9,7 +9,7 @@ namespace Bezalu.NinjaOne.MCP.Tools;
 /// </summary>
 internal sealed class ServiceTools(NinjaOneClient client)
 {
-    [McpServerTool(Name = "query_windows_services")]
+    [McpServerTool(Name = "query_windows_services", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("Query Windows services across all managed devices. Filter by service name or state (RUNNING, STOPPED, PAUSED, UNKNOWN, START_PENDING, STOP_PENDING, PAUSE_PENDING, CONTINUE_PENDING).")]
     public async Task<string> QueryWindowsServicesAsync(
         [Description("Service name filter (exact or partial match)")] string? name = null,

@@ -8,7 +8,7 @@ namespace Bezalu.NinjaOne.MCP.Tools;
 /// </summary>
 internal sealed class OrganizationTools(NinjaOneClient client)
 {
-    [McpServerTool(Name = "list_organizations")]
+    [McpServerTool(Name = "list_organizations", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("List all organizations in the NinjaOne instance.")]
     public async Task<string> ListOrganizationsAsync(
         [Description("Page size (default 50)")] int? pageSize = 50,
@@ -24,7 +24,7 @@ internal sealed class OrganizationTools(NinjaOneClient client)
         return Json.Serialize(orgs);
     }
 
-    [McpServerTool(Name = "list_organizations_detailed")]
+    [McpServerTool(Name = "list_organizations_detailed", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("List all organizations with detailed information including policies, locations, and settings.")]
     public async Task<string> ListOrganizationsDetailedAsync(
         [Description("Page size (default 50)")] int? pageSize = 50,
@@ -40,7 +40,7 @@ internal sealed class OrganizationTools(NinjaOneClient client)
         return Json.Serialize(orgs);
     }
 
-    [McpServerTool(Name = "get_organization")]
+    [McpServerTool(Name = "get_organization", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false)]
     [Description("Get detailed information about a specific organization by its ID.")]
     public async Task<string> GetOrganizationAsync(
         [Description("The NinjaOne organization ID")] int organizationId,
