@@ -22,10 +22,10 @@ internal sealed class ServiceTools(NinjaOneClient client)
         GetStateQueryParameterType? parsedState = null;
         if (!string.IsNullOrWhiteSpace(state))
         {
-            if (!Enum.TryParse<GetStateQueryParameterType>(state, ignoreCase: true, out var s))
+            if (!Enum.TryParse<GetStateQueryParameterType>(state, ignoreCase: true, out var s) || !Enum.IsDefined(s))
             {
                 var allowed = string.Join(", ", Enum.GetNames<GetStateQueryParameterType>());
-                return $"Invalid state '{state}'. Allowed values: {allowed}";
+                throw new ArgumentException($"Invalid state '{state}'. Allowed values: {allowed}", nameof(state));
             }
             parsedState = s;
         }

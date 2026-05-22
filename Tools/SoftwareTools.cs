@@ -21,9 +21,9 @@ internal sealed class SoftwareTools(NinjaOneClient client)
     {
         const string dateFormat = "yyyy-MM-dd";
         if (installedAfter is not null && !DateOnly.TryParseExact(installedAfter, dateFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
-            return $"Invalid installedAfter date '{installedAfter}'. Expected format: {dateFormat}";
+            throw new ArgumentException($"Invalid installedAfter date '{installedAfter}'. Expected format: {dateFormat}", nameof(installedAfter));
         if (installedBefore is not null && !DateOnly.TryParseExact(installedBefore, dateFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
-            return $"Invalid installedBefore date '{installedBefore}'. Expected format: {dateFormat}";
+            throw new ArgumentException($"Invalid installedBefore date '{installedBefore}'. Expected format: {dateFormat}", nameof(installedBefore));
 
         var result = await client.V2.Queries.Software.GetAsync(q =>
         {
