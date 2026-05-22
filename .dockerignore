@@ -4,7 +4,6 @@
 **/.vscode
 **/bin
 **/obj
-**/publish
 **/*.user
 **/*.dbmdl
 **/*.jfm
