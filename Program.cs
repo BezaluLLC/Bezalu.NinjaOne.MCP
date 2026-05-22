@@ -57,7 +57,12 @@ builder.Services
     .WithTools<OrganizationTools>()
     .WithTools<AlertTools>()
     .WithTools<LocationTools>()
-    .WithTools<CustomFieldTools>();
+    .WithTools<CustomFieldTools>()
+    .WithTools<SoftwareTools>()
+    .WithTools<ServiceTools>()
+    .WithTools<JobTools>()
+    .WithTools<TaskTools>()
+    .WithTools<SecurityTools>();
 
 var app = builder.Build();
 
