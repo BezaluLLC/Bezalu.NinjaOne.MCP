@@ -3,7 +3,9 @@ WORKDIR /src
 
 COPY *.csproj NuGet.Config ./
 RUN --mount=type=secret,id=github_token \
-    dotnet nuget update source "github" \
+    dotnet nuget remove source "github" --configfile ./NuGet.Config && \
+    dotnet nuget add source "https://nuget.pkg.github.com/BezaluLLC/index.json" \
+      --name "github" \
       --username "docker" \
       --password "$(cat /run/secrets/github_token)" \
       --store-password-in-clear-text \
