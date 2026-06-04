@@ -32,6 +32,9 @@ jobs:
       - name: Restore
         run: dotnet restore -r linux-x64
 
+      - name: Test
+        run: dotnet test tests/Bezalu.NinjaOne.MCP.Tests.csproj -c Release
+
       - name: Publish
         run: dotnet publish -c Release -r linux-x64 --no-restore -o ./publish
 

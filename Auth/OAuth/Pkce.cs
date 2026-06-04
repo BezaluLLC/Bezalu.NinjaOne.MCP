@@ -8,26 +8,31 @@ namespace Bezalu.NinjaOne.MCP.Auth.OAuth;
 /// </summary>
 internal static class Pkce
 {
+    /// <summary>The only PKCE challenge method this server supports (advertised in metadata).</summary>
+    public const string S256Method = "S256";
+
     /// <summary>
     /// Verifies a PKCE <paramref name="codeVerifier"/> against a previously supplied
-    /// <paramref name="codeChallenge"/> using the given <paramref name="method"/> (S256 or plain).
+    /// <paramref name="codeChallenge"/>. Only the <c>S256</c> <paramref name="method"/> is accepted;
+    /// any other value is rejected to stay consistent with advertised server metadata.
     /// </summary>
     public static bool Verify(string codeVerifier, string codeChallenge, string method)
     {
         if (string.IsNullOrEmpty(codeVerifier) || string.IsNullOrEmpty(codeChallenge))
             return false;
 
-        if (string.Equals(method, "plain", StringComparison.OrdinalIgnoreCase))
-            return CryptographicOperations.FixedTimeEquals(
-                Encoding.ASCII.GetBytes(codeVerifier),
-                Encoding.ASCII.GetBytes(codeChallenge));
+        if (!IsSupportedMethod(method))
+            return false;
 
-        // Default to S256.
         var computed = ComputeS256Challenge(codeVerifier);
         return CryptographicOperations.FixedTimeEquals(
             Encoding.ASCII.GetBytes(computed),
             Encoding.ASCII.GetBytes(codeChallenge));
     }
+
+    /// <summary>Returns true only for the supported S256 challenge method.</summary>
+    public static bool IsSupportedMethod(string? method) =>
+        string.Equals(method, S256Method, StringComparison.Ordinal);
 
     /// <summary>Computes the S256 code challenge for a verifier: BASE64URL(SHA256(verifier)).</summary>
     public static string ComputeS256Challenge(string codeVerifier)

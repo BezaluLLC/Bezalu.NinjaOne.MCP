@@ -20,16 +20,22 @@ internal sealed class FileOAuthStore
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     };
 
+    /// <summary>Lifetime for in-flight authorization sessions and single-use codes before eviction.</summary>
+    private static readonly TimeSpan TransientLifetime = TimeSpan.FromMinutes(10);
+
     private readonly string _clientsFile;
     private readonly string _tokensFile;
-    private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly SemaphoreSlim _fileGate = new(1, 1);
+
+    // Guards the in-memory client/token dictionaries for both reads and writes.
+    private readonly object _sync = new();
 
     // Short-lived, in-memory only (do not need to survive restarts).
     private readonly ConcurrentDictionary<string, AuthSession> _sessions = new();
     private readonly ConcurrentDictionary<string, AuthorizationCode> _codes = new();
 
-    private Dictionary<string, RegisteredClient> _clients = [];
-    private Dictionary<string, TokenRecord> _tokens = [];
+    private readonly Dictionary<string, RegisteredClient> _clients;
+    private readonly Dictionary<string, TokenRecord> _tokens;
 
     public FileOAuthStore(OAuthServerOptions options)
     {
@@ -46,31 +52,39 @@ internal sealed class FileOAuthStore
 
     public async Task SaveClientAsync(RegisteredClient client, CancellationToken cancellationToken = default)
     {
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+        string snapshot;
+        lock (_sync)
         {
             _clients[client.ClientId] = client;
-            await PersistAsync(_clientsFile, _clients, cancellationToken).ConfigureAwait(false);
+            snapshot = JsonSerializer.Serialize(_clients, JsonOptions);
         }
-        finally
-        {
-            _gate.Release();
-        }
+        await PersistAsync(_clientsFile, snapshot, cancellationToken).ConfigureAwait(false);
     }
 
-    public RegisteredClient? GetClient(string clientId) =>
-        _clients.TryGetValue(clientId, out var client) ? client : null;
+    public RegisteredClient? GetClient(string clientId)
+    {
+        lock (_sync)
+            return _clients.TryGetValue(clientId, out var client) ? client : null;
+    }
 
     // --- Authorization sessions (in-flight) --------------------------------
 
-    public void SaveSession(AuthSession session) => _sessions[session.State] = session;
+    public void SaveSession(AuthSession session)
+    {
+        EvictExpiredTransients();
+        _sessions[session.State] = session;
+    }
 
     public AuthSession? TakeSession(string state) =>
         _sessions.TryRemove(state, out var session) ? session : null;
 
     // --- Authorization codes (single-use) ----------------------------------
 
-    public void SaveCode(AuthorizationCode code) => _codes[code.Code] = code;
+    public void SaveCode(AuthorizationCode code)
+    {
+        EvictExpiredTransients();
+        _codes[code.Code] = code;
+    }
 
     public AuthorizationCode? TakeCode(string code) =>
         _codes.TryRemove(code, out var value) ? value : null;
@@ -79,40 +93,59 @@ internal sealed class FileOAuthStore
 
     public async Task SaveTokenAsync(TokenRecord token, CancellationToken cancellationToken = default)
     {
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+        string snapshot;
+        lock (_sync)
         {
             _tokens[token.AccessToken] = token;
-            await PersistAsync(_tokensFile, _tokens, cancellationToken).ConfigureAwait(false);
+            snapshot = JsonSerializer.Serialize(_tokens, JsonOptions);
         }
-        finally
-        {
-            _gate.Release();
-        }
+        await PersistAsync(_tokensFile, snapshot, cancellationToken).ConfigureAwait(false);
     }
 
-    public TokenRecord? GetByAccessToken(string accessToken) =>
-        _tokens.TryGetValue(accessToken, out var token) ? token : null;
+    public TokenRecord? GetByAccessToken(string accessToken)
+    {
+        lock (_sync)
+            return _tokens.TryGetValue(accessToken, out var token) ? token : null;
+    }
 
-    public TokenRecord? GetByRefreshToken(string refreshToken) =>
-        _tokens.Values.FirstOrDefault(t => t.RefreshToken == refreshToken);
+    public TokenRecord? GetByRefreshToken(string refreshToken)
+    {
+        lock (_sync)
+            return _tokens.Values.FirstOrDefault(t => t.RefreshToken == refreshToken);
+    }
 
     public async Task ReplaceTokenAsync(string oldAccessToken, TokenRecord newToken, CancellationToken cancellationToken = default)
     {
-        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+        string snapshot;
+        lock (_sync)
         {
             _tokens.Remove(oldAccessToken);
             _tokens[newToken.AccessToken] = newToken;
-            await PersistAsync(_tokensFile, _tokens, cancellationToken).ConfigureAwait(false);
+            snapshot = JsonSerializer.Serialize(_tokens, JsonOptions);
         }
-        finally
-        {
-            _gate.Release();
-        }
+        await PersistAsync(_tokensFile, snapshot, cancellationToken).ConfigureAwait(false);
     }
 
     // --- Helpers -----------------------------------------------------------
+
+    /// <summary>
+    /// Removes in-flight sessions and unconsumed codes older than <see cref="TransientLifetime"/>,
+    /// bounding memory for a long-running server even if clients abandon authorization flows.
+    /// </summary>
+    private void EvictExpiredTransients()
+    {
+        var cutoff = DateTimeOffset.UtcNow.ToUnixTimeSeconds() - (long)TransientLifetime.TotalSeconds;
+        foreach (var (key, session) in _sessions)
+        {
+            if (session.CreatedAt < cutoff)
+                _sessions.TryRemove(key, out _);
+        }
+        foreach (var (key, code) in _codes)
+        {
+            if (code.CreatedAt < cutoff)
+                _codes.TryRemove(key, out _);
+        }
+    }
 
     private static T? Load<T>(string path) where T : class
     {
@@ -130,11 +163,19 @@ internal sealed class FileOAuthStore
         }
     }
 
-    private static async Task PersistAsync<T>(string path, T value, CancellationToken cancellationToken)
+    private async Task PersistAsync(string path, string json, CancellationToken cancellationToken)
     {
-        var json = JsonSerializer.Serialize(value, JsonOptions);
-        var tempPath = path + ".tmp";
-        await File.WriteAllTextAsync(tempPath, json, cancellationToken).ConfigureAwait(false);
-        File.Move(tempPath, path, overwrite: true);
+        // Serialize file writes so concurrent saves can't interleave temp-file writes/moves.
+        await _fileGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var tempPath = path + ".tmp";
+            await File.WriteAllTextAsync(tempPath, json, cancellationToken).ConfigureAwait(false);
+            File.Move(tempPath, path, overwrite: true);
+        }
+        finally
+        {
+            _fileGate.Release();
+        }
     }
 }

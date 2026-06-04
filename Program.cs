@@ -15,11 +15,17 @@ builder.Services.AddSingleton<FileOAuthStore>();
 builder.Services.AddSingleton<NinjaOneTokenBridge>();
 
 // Honor forwarded headers so issuer/redirect URLs reflect the external host behind a proxy.
+// Trusting these headers from any source lets a direct client spoof X-Forwarded-Host/Proto and
+// influence issuer/redirect URLs, so the proxy networks must be cleared only when explicitly opted in.
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost;
-    options.KnownIPNetworks.Clear();
-    options.KnownProxies.Clear();
+    if (oauthOptions.TrustForwardedHeaders)
+    {
+        // Server is exclusively fronted by a trusted reverse proxy.
+        options.KnownIPNetworks.Clear();
+        options.KnownProxies.Clear();
+    }
 });
 
 // Configure MCP authentication — the MCP handler serves resource metadata and challenges.

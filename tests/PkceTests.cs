@@ -23,20 +23,20 @@ public class PkceTests
     }
 
     [Fact]
-    public void Verify_Plain_MatchesIdenticalValue()
+    public void Verify_Plain_IsRejected()
     {
         var verifier = Pkce.NewToken(32);
 
-        Assert.True(Pkce.Verify(verifier, verifier, "plain"));
+        Assert.False(Pkce.Verify(verifier, verifier, "plain"));
     }
 
     [Fact]
-    public void Verify_DefaultsToS256_WhenMethodUnknown()
+    public void Verify_UnknownMethod_IsRejected()
     {
         var verifier = Pkce.NewToken(32);
         var challenge = Pkce.ComputeS256Challenge(verifier);
 
-        Assert.True(Pkce.Verify(verifier, challenge, "something-else"));
+        Assert.False(Pkce.Verify(verifier, challenge, "something-else"));
     }
 
     [Theory]

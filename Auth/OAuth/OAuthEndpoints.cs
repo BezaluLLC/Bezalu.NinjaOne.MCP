@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -13,6 +14,9 @@ internal static class OAuthEndpoints
 {
     /// <summary>The access-token lifetime issued by this server (1 hour).</summary>
     private const int AccessTokenLifetimeSeconds = 3600;
+
+    /// <summary>Token-endpoint authentication methods this server supports and advertises.</summary>
+    private static readonly string[] SupportedAuthMethods = ["none", "client_secret_post"];
 
     /// <summary>The relative path NinjaOne redirects back to after user authorization.</summary>
     public const string CallbackPath = "/callback";
@@ -40,8 +44,8 @@ internal static class OAuthEndpoints
             ["registration_endpoint"] = $"{issuer}/register",
             ["response_types_supported"] = new[] { "code" },
             ["grant_types_supported"] = new[] { "authorization_code", "refresh_token" },
-            ["code_challenge_methods_supported"] = new[] { "S256" },
-            ["token_endpoint_auth_methods_supported"] = new[] { "none", "client_secret_post" },
+            ["code_challenge_methods_supported"] = new[] { Pkce.S256Method },
+            ["token_endpoint_auth_methods_supported"] = SupportedAuthMethods,
             ["scopes_supported"] = context.RequestServices.GetRequiredService<OAuthServerOptions>()
                 .Scopes.Split(' ', StringSplitOptions.RemoveEmptyEntries),
         };
@@ -68,6 +72,8 @@ internal static class OAuthEndpoints
         var authMethod = string.IsNullOrWhiteSpace(request.TokenEndpointAuthMethod)
             ? "none"
             : request.TokenEndpointAuthMethod;
+        if (!SupportedAuthMethods.Contains(authMethod))
+            return InvalidClientMetadata($"unsupported token_endpoint_auth_method '{authMethod}'");
         var isConfidential = !string.Equals(authMethod, "none", StringComparison.OrdinalIgnoreCase);
 
         var client = new RegisteredClient
@@ -115,7 +121,6 @@ internal static class OAuthEndpoints
         [FromQuery(Name = "redirect_uri")] string? redirectUri,
         [FromQuery(Name = "code_challenge")] string? codeChallenge,
         [FromQuery(Name = "code_challenge_method")] string? codeChallengeMethod,
-        [FromQuery] string? scope,
         [FromQuery] string? state)
     {
         if (!string.Equals(responseType, "code", StringComparison.Ordinal))
@@ -124,6 +129,11 @@ internal static class OAuthEndpoints
             return Results.BadRequest(new { error = "invalid_request", error_description = "client_id is required" });
         if (string.IsNullOrWhiteSpace(codeChallenge))
             return AuthorizeError(redirectUri, state, "invalid_request", "code_challenge is required (PKCE)");
+
+        // Only S256 is advertised/supported; an explicitly-supplied other method is rejected.
+        var challengeMethod = string.IsNullOrWhiteSpace(codeChallengeMethod) ? Pkce.S256Method : codeChallengeMethod;
+        if (!Pkce.IsSupportedMethod(challengeMethod))
+            return AuthorizeError(redirectUri, state, "invalid_request", "only S256 code_challenge_method is supported");
 
         var client = store.GetClient(clientId);
         if (client is null)
@@ -141,8 +151,10 @@ internal static class OAuthEndpoints
             ClientRedirectUri = redirectUri,
             ClientState = state,
             CodeChallenge = codeChallenge,
-            CodeChallengeMethod = string.IsNullOrWhiteSpace(codeChallengeMethod) ? "S256" : codeChallengeMethod,
-            Scope = string.IsNullOrWhiteSpace(scope) ? options.Scopes : scope,
+            CodeChallengeMethod = challengeMethod,
+            // The upstream NinjaOne request always uses the configured scopes, so record those
+            // (not the caller-supplied value) to keep the issued token's scope accurate.
+            Scope = options.Scopes,
         });
 
         var ninjaRedirectUri = $"{GetIssuer(context)}{CallbackPath}";
@@ -226,6 +238,30 @@ internal static class OAuthEndpoints
         };
     }
 
+    /// <summary>
+    /// Authenticates the client per its registered <c>token_endpoint_auth_method</c>. Confidential
+    /// clients (issued a secret) must present a matching <c>client_secret</c> via client_secret_post.
+    /// Returns an error result when authentication fails, otherwise null.
+    /// </summary>
+    private static IResult? AuthenticateClient(RegisteredClient client, IFormCollection form)
+    {
+        if (client.ClientSecret is null)
+            return null;
+
+        var presented = form["client_secret"].ToString();
+        if (string.IsNullOrEmpty(presented) ||
+            !CryptographicOperations.FixedTimeEquals(
+                System.Text.Encoding.UTF8.GetBytes(presented),
+                System.Text.Encoding.UTF8.GetBytes(client.ClientSecret)))
+        {
+            return Results.Json(
+                new { error = "invalid_client", error_description = "client authentication failed" },
+                statusCode: StatusCodes.Status401Unauthorized);
+        }
+
+        return null;
+    }
+
     private static async Task<IResult> ExchangeAuthorizationCodeAsync(
         FileOAuthStore store,
         IFormCollection form,
@@ -245,6 +281,12 @@ internal static class OAuthEndpoints
 
         if (!string.Equals(authCode.ClientId, clientId, StringComparison.Ordinal))
             return Results.BadRequest(new { error = "invalid_grant", error_description = "client_id mismatch" });
+
+        var client = store.GetClient(authCode.ClientId);
+        if (client is null)
+            return Results.BadRequest(new { error = "invalid_grant", error_description = "unknown client" });
+        if (AuthenticateClient(client, form) is { } authError)
+            return authError;
 
         if (!string.Equals(authCode.RedirectUri, redirectUri, StringComparison.Ordinal))
             return Results.BadRequest(new { error = "invalid_grant", error_description = "redirect_uri mismatch" });
@@ -272,6 +314,12 @@ internal static class OAuthEndpoints
         var existing = store.GetByRefreshToken(refreshToken);
         if (existing is null)
             return Results.BadRequest(new { error = "invalid_grant", error_description = "invalid refresh_token" });
+
+        var client = store.GetClient(existing.ClientId);
+        if (client is null)
+            return Results.BadRequest(new { error = "invalid_grant", error_description = "unknown client" });
+        if (AuthenticateClient(client, form) is { } authError)
+            return authError;
 
         string ninjaAccessToken = existing.NinjaAccessToken;
         string? ninjaRefreshToken = existing.NinjaRefreshToken;
@@ -320,7 +368,9 @@ internal static class OAuthEndpoints
         long ninjaExpiresAt) => new()
         {
             AccessToken = Pkce.NewToken(32),
-            RefreshToken = Pkce.NewToken(32),
+            // Only issue a refresh token when the upstream NinjaOne flow actually provided one;
+            // otherwise we cannot renew upstream credentials and a refresh would later fail.
+            RefreshToken = string.IsNullOrEmpty(ninjaRefreshToken) ? null : Pkce.NewToken(32),
             ClientId = clientId,
             Scope = scope,
             NinjaAccessToken = ninjaAccessToken,
@@ -329,14 +379,19 @@ internal static class OAuthEndpoints
             AccessTokenExpiresAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + AccessTokenLifetimeSeconds,
         };
 
-    private static IResult TokenResponse(TokenRecord token) => Results.Json(new Dictionary<string, object?>
+    private static IResult TokenResponse(TokenRecord token)
     {
-        ["access_token"] = token.AccessToken,
-        ["token_type"] = "Bearer",
-        ["expires_in"] = AccessTokenLifetimeSeconds,
-        ["refresh_token"] = token.RefreshToken,
-        ["scope"] = token.Scope,
-    });
+        var response = new Dictionary<string, object?>
+        {
+            ["access_token"] = token.AccessToken,
+            ["token_type"] = "Bearer",
+            ["expires_in"] = AccessTokenLifetimeSeconds,
+            ["scope"] = token.Scope,
+        };
+        if (!string.IsNullOrEmpty(token.RefreshToken))
+            response["refresh_token"] = token.RefreshToken;
+        return Results.Json(response);
+    }
 
     // --- Helpers -----------------------------------------------------------
 

@@ -20,7 +20,8 @@ internal sealed class OAuthServerOptions
 
     /// <summary>
     /// Absolute or relative path to the directory used for local persistence of registered
-    /// clients, authorization codes, and tokens. Defaults to <c>/app/data</c>.
+    /// clients and issued tokens. Defaults to <c>/app/data</c>. Authorization codes and in-flight
+    /// authorization sessions are kept in memory only and are never written here.
     /// </summary>
     public required string DataPath { get; init; }
 
@@ -29,6 +30,13 @@ internal sealed class OAuthServerOptions
     /// When unset, the issuer is derived from the incoming request (honoring forwarded headers).
     /// </summary>
     public string? PublicBaseUrl { get; init; }
+
+    /// <summary>
+    /// When true, X-Forwarded-* headers are trusted from any source. Only enable this when the
+    /// server is exclusively reachable through a trusted reverse proxy that sets these headers,
+    /// otherwise a direct client could spoof the host/scheme used to build issuer/redirect URLs.
+    /// </summary>
+    public bool TrustForwardedHeaders { get; init; }
 
     /// <summary>NinjaOne authorization endpoint.</summary>
     public string NinjaAuthorizeEndpoint => $"{TrimmedInstance}/ws/oauth/authorize";
@@ -55,6 +63,7 @@ internal sealed class OAuthServerOptions
             Scopes = configuration["NINJAONE_SCOPES"] ?? "monitoring management offline_access",
             DataPath = configuration["MCP_DATA_PATH"] ?? "/app/data",
             PublicBaseUrl = configuration["PUBLIC_BASE_URL"],
+            TrustForwardedHeaders = configuration.GetValue("TRUST_FORWARDED_HEADERS", false),
         };
     }
 }
