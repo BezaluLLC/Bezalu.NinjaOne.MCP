@@ -48,6 +48,16 @@ public class PkceTests
     }
 
     [Fact]
+    public void Verify_ReturnsFalseForLengthMismatchedChallenge()
+    {
+        var verifier = Pkce.NewToken(32);
+
+        // A malformed challenge whose length differs from the computed S256 challenge must return
+        // false, not throw: FixedTimeEquals returns false (rather than throwing) on length mismatch.
+        Assert.False(Pkce.Verify(verifier, "short", "S256"));
+    }
+
+    [Fact]
     public void NewToken_ProducesUrlSafeUniqueValues()
     {
         var a = Pkce.NewToken(32);

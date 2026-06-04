@@ -45,6 +45,11 @@ internal sealed class IssuedTokenBearerHandler(
 
         var ninjaAccessToken = record.NinjaAccessToken;
 
+        // If the upstream NinjaOne token is already expired and cannot be refreshed, fail now so the
+        // client reauthorizes instead of receiving a 200 and a guaranteed-to-fail NinjaOne call.
+        if (record.NinjaAccessTokenExpiresAt <= now && string.IsNullOrWhiteSpace(record.NinjaRefreshToken))
+            return AuthenticateResult.Fail("Upstream NinjaOne token expired and cannot be refreshed");
+
         // Transparently refresh the upstream NinjaOne token if it is expired or about to expire.
         if (record.NinjaAccessTokenExpiresAt <= now + RefreshSkewSeconds && !string.IsNullOrWhiteSpace(record.NinjaRefreshToken))
         {

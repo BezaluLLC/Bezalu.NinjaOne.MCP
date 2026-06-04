@@ -45,6 +45,11 @@ In-flight authorization sessions and single-use authorization codes are short-li
 memory only. Mount a volume at `MCP_DATA_PATH` to retain registrations and user sessions across
 container restarts.
 
+> **Token confidentiality at rest:** `tokens.json` contains issued bearer tokens and the upstream
+> NinjaOne access/refresh tokens in plaintext. Anyone able to read the `MCP_DATA_PATH` volume gains
+> the same NinjaOne access as the authenticated users. Restrict access to the volume to the runtime
+> user only and back it with an encrypted volume (or encrypted host filesystem) in production.
+
 > **Permissions:** the container runs as a non-root user. The image pre-creates `/app/data` with
 > the correct ownership, and Docker **named volumes** (as in the example below) inherit it
 > automatically. If you instead use a **host bind mount** (e.g. `-v /srv/mcp:/app/data`), make the

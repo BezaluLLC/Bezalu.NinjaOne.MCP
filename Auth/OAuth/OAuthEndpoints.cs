@@ -142,6 +142,13 @@ internal static class OAuthEndpoints
         if (string.IsNullOrWhiteSpace(redirectUri) || !client.RedirectUris.Contains(redirectUri))
             return Results.BadRequest(new { error = "invalid_request", error_description = "redirect_uri not registered for client" });
 
+        // Enforce what the client registered: it must have requested the code response type and the
+        // authorization_code grant, otherwise running the flow contradicts its declared capabilities.
+        if (!client.ResponseTypes.Contains("code", StringComparer.Ordinal))
+            return AuthorizeError(redirectUri, state, "unauthorized_client", "client did not register response_type=code");
+        if (!client.GrantTypes.Contains("authorization_code", StringComparer.Ordinal))
+            return AuthorizeError(redirectUri, state, "unauthorized_client", "client did not register the authorization_code grant");
+
         // Bridge state ties the NinjaOne callback back to this MCP authorization request.
         var bridgeState = Pkce.NewToken(24);
         store.SaveSession(new AuthSession
@@ -320,6 +327,10 @@ internal static class OAuthEndpoints
             return Results.BadRequest(new { error = "invalid_grant", error_description = "unknown client" });
         if (AuthenticateClient(client, form) is { } authError)
             return authError;
+
+        // A client may only refresh if it registered for the refresh_token grant.
+        if (!client.GrantTypes.Contains("refresh_token", StringComparer.Ordinal))
+            return Results.BadRequest(new { error = "unauthorized_client", error_description = "client did not register the refresh_token grant" });
 
         string ninjaAccessToken = existing.NinjaAccessToken;
         string? ninjaRefreshToken = existing.NinjaRefreshToken;

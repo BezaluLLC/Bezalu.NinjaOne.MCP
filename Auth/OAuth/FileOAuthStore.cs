@@ -46,6 +46,7 @@ internal sealed class FileOAuthStore
 
         _clients = Load<Dictionary<string, RegisteredClient>>(_clientsFile) ?? [];
         _tokens = Load<Dictionary<string, TokenRecord>>(_tokensFile) ?? [];
+        PruneExpiredTokens();
     }
 
     // --- Clients -----------------------------------------------------------
@@ -97,6 +98,7 @@ internal sealed class FileOAuthStore
         lock (_sync)
         {
             _tokens[token.AccessToken] = token;
+            PruneExpiredTokens();
             snapshot = JsonSerializer.Serialize(_tokens, JsonOptions);
         }
         await PersistAsync(_tokensFile, snapshot, cancellationToken).ConfigureAwait(false);
@@ -127,6 +129,22 @@ internal sealed class FileOAuthStore
     }
 
     // --- Helpers -----------------------------------------------------------
+
+    /// <summary>
+    /// Removes issued token records that can no longer be used: the access token is expired and there
+    /// is no refresh token to renew it. Records with a refresh token are retained so refresh still works.
+    /// Caller must hold <see cref="_sync"/>.
+    /// </summary>
+    private void PruneExpiredTokens()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var dead = _tokens
+            .Where(kvp => kvp.Value.AccessTokenExpiresAt <= now && string.IsNullOrEmpty(kvp.Value.RefreshToken))
+            .Select(kvp => kvp.Key)
+            .ToList();
+        foreach (var key in dead)
+            _tokens.Remove(key);
+    }
 
     /// <summary>
     /// Removes in-flight sessions and unconsumed codes older than <see cref="TransientLifetime"/>,
