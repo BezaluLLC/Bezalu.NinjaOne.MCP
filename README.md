@@ -4,7 +4,9 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server that pr
 
 ## Features
 
-- **OAuth Authorization Code Flow** — Actions are performed as the authenticated user via MCP-native OAuth
+- **Embedded OAuth 2.0 Authorization Server with Dynamic Client Registration (DCR)** — Spec-compliant with MCP 2025-11-25; works with any conformant MCP client even though NinjaOne and Entra ID do not support DCR
+- **Per-user delegated access** — Actions are performed as the authenticated user; the server never uses a privileged app token for NinjaOne calls
+- **Cloud-neutral local persistence** — Clients and tokens are stored on local disk under a configurable, volume-mountable path (no cloud dependency)
 - **High-value NinjaOne tools** — Devices, Organizations, Locations, Alerts, Custom Fields, Software, Windows Services, Jobs, Tasks, Security & Patching
 - **Container-first** — Distributed as a Linux container image via GitHub Container Registry
 - **Minimal footprint** — Self-contained single-file publish, ideal for Azure Container Apps
@@ -22,7 +24,31 @@ The server requires the following environment variables:
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `NINJAONE_INSTANCE` | Yes | NinjaOne instance URL (e.g., `https://app.ninjarmm.com`, `https://eu.ninjarmm.com`) |
-| `NINJAONE_SCOPES` | No | OAuth scopes advertised in resource metadata (default: `monitoring management offline_access`) |
+| `NINJAONE_CLIENT_ID` | Yes | Client ID of the single NinjaOne API application used to bridge user authentication |
+| `NINJAONE_CLIENT_SECRET` | Yes | Client secret of that NinjaOne API application |
+| `NINJAONE_SCOPES` | No | OAuth scopes requested upstream and advertised in metadata (default: `monitoring management offline_access`) |
+| `MCP_DATA_PATH` | No | Directory for local persistence of registered clients and tokens (default: `/app/data`) |
+| `PUBLIC_BASE_URL` | No | Explicit externally-visible base URL (e.g., `https://mcp.example.com`). When unset, it is derived from the request, honoring `X-Forwarded-*` headers |
+
+### Local persistence & volume mount
+
+The server is its own OAuth authorization server, so it persists registered clients and issued
+tokens locally — no cloud or external database is required. Storage is a small set of JSON files
+under `MCP_DATA_PATH` (default `/app/data`):
+
+| File | Contents |
+|------|----------|
+| `clients.json` | Dynamically-registered MCP clients (RFC 7591) |
+| `tokens.json` | Issued access/refresh tokens mapped to their upstream NinjaOne token set |
+
+In-flight authorization sessions and single-use authorization codes are short-lived and kept in
+memory only. Mount a volume at `MCP_DATA_PATH` to retain registrations and user sessions across
+container restarts.
+
+> **Permissions:** the container runs as a non-root user. The image pre-creates `/app/data` with
+> the correct ownership, and Docker **named volumes** (as in the example below) inherit it
+> automatically. If you instead use a **host bind mount** (e.g. `-v /srv/mcp:/app/data`), make the
+> host directory writable by the runtime user first, for example `chown -R 1654:1654 /srv/mcp`.
 
 ## Running
 
@@ -30,6 +56,9 @@ The server requires the following environment variables:
 docker run -d \
   -p 8080:8080 \
   -e NINJAONE_INSTANCE=https://app.ninjarmm.com \
+  -e NINJAONE_CLIENT_ID=your-ninjaone-client-id \
+  -e NINJAONE_CLIENT_SECRET=your-ninjaone-client-secret \
+  -v ninjaone-mcp-data:/app/data \
   ghcr.io/bezalullc/ninjaone-mcp:latest
 ```
 
@@ -48,7 +77,10 @@ Connect your MCP client to the running server:
 }
 ```
 
-The MCP client will handle the OAuth Authorization Code Flow automatically — the user will be prompted to authenticate with NinjaOne in their browser, and the resulting token will be used for all subsequent API calls.
+The MCP client discovers the server's OAuth authorization server metadata, dynamically registers
+itself (DCR), and runs the Authorization Code + PKCE flow automatically — the user authenticates
+with NinjaOne in their browser, and the resulting per-user token is used for all subsequent API
+calls.
 
 ## Available Tools
 
@@ -113,15 +145,34 @@ The MCP client will handle the OAuth Authorization Code Flow automatically — t
 
 1. In NinjaOne Administration → Apps → API, create an API application
 2. Set the **Authorization Grant Type** to "Authorization Code"
-3. Set the **Redirect URI** to match your MCP client's callback URL
-4. Note the **Client ID** and **Client Secret**
+3. Set the **Redirect URI** to this server's callback URL: `<PUBLIC_BASE_URL>/callback`
+   (e.g., `https://mcp.example.com/callback` or `http://localhost:8080/callback` for local testing)
+4. Note the **Client ID** and **Client Secret** and provide them via `NINJAONE_CLIENT_ID` / `NINJAONE_CLIENT_SECRET`
 5. Set the appropriate scopes (monitoring, management, etc.)
+
+> Only this single NinjaOne API application credential is needed. MCP clients never see it — they
+> register dynamically against this server and receive tokens this server issues.
+
+## OAuth Endpoints
+
+The server exposes a spec-compliant OAuth 2.0 authorization server:
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /.well-known/oauth-authorization-server` | Authorization server metadata (RFC 8414) |
+| `POST /register` | Dynamic Client Registration (RFC 7591) |
+| `GET /authorize` | Authorization endpoint (PKCE required) |
+| `GET /callback` | NinjaOne authorization-code callback |
+| `POST /token` | Token endpoint (`authorization_code`, `refresh_token`) |
 
 ## Development
 
 ```bash
 # Set environment variables
 export NINJAONE_INSTANCE=https://app.ninjarmm.com
+export NINJAONE_CLIENT_ID=your-ninjaone-client-id
+export NINJAONE_CLIENT_SECRET=your-ninjaone-client-secret
+export MCP_DATA_PATH=./data
 
 # Run locally
 dotnet run
@@ -132,17 +183,22 @@ dotnet run
 ```
 MCP Client (e.g., VS Code, Claude Desktop)
     │
-    ├─ OAuth Authorization Code Flow ──► NinjaOne OAuth Server
-    │                                         │
-    │◄── Access Token ────────────────────────┘
-    │
-    ├─ Bearer Token ──► MCP Server (this container)
-    │                       │
-    │                       ├─ Extracts token from request
-    │                       ├─ Creates per-request NinjaOne.Client
-    │                       └─ Calls NinjaOne API as the user
-    │
-    │◄── Tool Results ──────┘
+    ├─ 1. Discover metadata + Dynamic Client Registration ─► MCP Server (this container)
+    │                                                            │  (OAuth Authorization Server)
+    ├─ 2. /authorize (PKCE) ─────────────────────────────────►  │
+    │                                                            ├─ Redirects user to NinjaOne
+    │                                                            │
+    │        NinjaOne OAuth Server ◄── user authenticates ──────┤
+    │                  │                                         │
+    │                  └─► /callback (auth code) ───────────────►├─ Exchanges code (single app cred)
+    │                                                            │  Stores per-user NinjaOne tokens
+    ├─ 3. /token (code + PKCE verifier) ─────────────────────►  │  Issues this server's token
+    │◄── access_token + refresh_token ──────────────────────────┤
+    │                                                            │
+    ├─ 4. Bearer <token> ──────────────────────────────────────►├─ Validates token, resolves the
+    │                                                            │  user's NinjaOne token (refreshes
+    │                                                            │  transparently), calls NinjaOne
+    │◄── Tool Results ──────────────────────────────────────────┘  as the user
 ```
 
 ## License
