@@ -44,6 +44,10 @@ builder.Services.AddAuthentication(options =>
         var issuer = OAuthEndpoints.GetIssuer(context.HttpContext);
         context.ResourceMetadata = new ProtectedResourceMetadata
         {
+            // Resolve the resource identifier from the external base URL rather than letting the
+            // handler infer it from the raw request, which reports http when TLS terminates at a
+            // reverse proxy and the forwarded scheme is not honored.
+            Resource = issuer,
             AuthorizationServers = { issuer },
             ScopesSupported = [.. oauthOptions.Scopes.Split(' ', StringSplitOptions.RemoveEmptyEntries)],
         };
